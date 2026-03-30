@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import os # Biblioteca adicionada para procurar ficheiros locais
 
 # ==========================================
 # CONFIGURAÇÃO DA PÁGINA
@@ -12,10 +13,12 @@ st.title("🔥 Monitorização de Caldeira em Tempo Real")
 st.markdown("Análise de grandes volumes de dados do processo térmico para identificação de sistemas MIMO.")
 
 # ==========================================
-# 1. BARRA LATERAL (UPLOAD E CONFIGURAÇÕES)
+# 1. BARRA LATERAL (CONFIGURAÇÕES E UPLOAD OPCIONAL)
 # ==========================================
-st.sidebar.header("📁 Carregamento de Dados")
-arquivo_csv = st.sidebar.file_uploader("Selecione o ficheiro .csv da Caldeira", type=['csv'])
+st.sidebar.header("📁 Fonte de Dados")
+
+# O botão de upload passa a ser opcional
+arquivo_csv_upload = st.sidebar.file_uploader("Upload de novo ficheiro (Opcional)", type=['csv'])
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("⚙️ Ajustes de Leitura")
@@ -29,7 +32,7 @@ decimal = st.sidebar.selectbox("Separador de decimais", [",", "."])
 def carregar_dados(arquivo, sep, dec):
     if sep == "\\t (Tab)": sep = "\t"
     
-    # Lê o CSV
+    # O pd.read_csv aceita tanto o ficheiro em texto (upload) como o caminho (string)
     df = pd.read_csv(arquivo, sep=sep, decimal=dec)
     
     # Converte a primeira coluna para Data/Hora (forçando o padrão dia/mês)
@@ -42,12 +45,24 @@ def carregar_dados(arquivo, sep, dec):
     return df, nome_coluna_data
 
 # ==========================================
-# 3. RENDERIZAÇÃO DO DASHBOARD
+# 3. LÓGICA DE SELEÇÃO DO FICHEIRO
 # ==========================================
-if arquivo_csv is not None:
+ficheiro_padrao = "Fornalha.csv"
+
+if arquivo_csv_upload is not None:
+    fonte_dados = arquivo_csv_upload
+elif os.path.exists(ficheiro_padrao):
+    fonte_dados = ficheiro_padrao
+else:
+    fonte_dados = None
+
+# ==========================================
+# 4. RENDERIZAÇÃO DO DASHBOARD
+# ==========================================
+if fonte_dados is not None:
     try:
-        # Carrega os dados originais
-        df_completo, col_data = carregar_dados(arquivo_csv, separador, decimal)
+        # Carrega os dados da fonte selecionada
+        df_completo, col_data = carregar_dados(fonte_dados, separador, decimal)
         
         # --- LÓGICA DO FILTRO DE DATAS ---
         st.sidebar.markdown("---")
@@ -127,7 +142,7 @@ if arquivo_csv is not None:
             if 'Exaustor' in df_filtrado.columns:
                 fig_sync.add_trace(go.Scatter(x=df_filtrado[col_data], y=df_filtrado['Exaustor'], mode='lines', name='Exaustor (%)', line=dict(color='green')), row=3, col=1)
 
-            # Ajustes visuais (Altura ajustada para 800px para caber os 3 gráficos confortavelmente)
+            # Ajustes visuais
             fig_sync.update_layout(
                 height=800, 
                 margin=dict(l=0, r=0, t=40, b=0), 
@@ -135,17 +150,14 @@ if arquivo_csv is not None:
                 legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1)
             )
             
-            # Plota a figura sincronizada no ecrã inteiro
             st.plotly_chart(fig_sync, use_container_width=True)
 
             # -- TABELA EXPLORATÓRIA --
-            # Removemos a coluna auxiliar 'Data_Filtragem' só para a tabela ficar limpa
             df_exibicao = df_filtrado.drop(columns=['Data_Filtragem'])
-            
             st.subheader(f"📋 Registos Históricos ({len(df_exibicao)} linhas no filtro atual)")
             st.dataframe(df_exibicao, use_container_width=True, height=300)
 
     except Exception as e:
         st.error(f"❌ Erro ao processar o ficheiro. Detalhe técnico: {e}")
 else:
-    st.info("👆 Faça o carregamento do ficheiro Fornalha.csv na barra lateral para iniciar.")
+    st.info("👆 Ficheiro 'Fornalha.csv' não encontrado. Por favor, certifique-se de que está na mesma pasta que o script ou faça o upload manual na barra lateral.")
